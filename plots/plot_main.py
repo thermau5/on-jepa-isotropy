@@ -1498,7 +1498,7 @@ def plot_unified_risk() -> None:
         summary,
         "n_train",
         "unified_risk_bound",
-        label="Theorem bound",
+        label="Calibrated bound",
     )
     dashed_theory(
         axes[5],

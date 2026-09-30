@@ -44,16 +44,31 @@ nonlinear networks.
 | `plots/` | Figure generation |
 | `tests/` | pytest suite |
 
+## Requirements
+
+Python 3.10+:
+
+```bash
+pip install numpy scipy pandas matplotlib scikit-learn pyyaml torch torchvision pytest
+```
+
 ## Usage
 
 ```bash
 python -m experiments.run_all                   # synthetic suite + reduction/gauge/digits
+python -m experiments.exp_regularizer_mnist      # MNIST MLP regularizer diagnostic
 python -m experiments.exp_regularizer_mnist_gpu  # scaled MNIST regularizer diagnostic
 python -m experiments.exp_regularizer_cifar_gpu  # CIFAR-10 regularizer diagnostic
 python -m experiments.exp_regularizer_cifar_gpu \
     --config configs/regularizer_cifar100.yaml \
     --output results/exp_regularizer_cifar100.csv  # CIFAR-100 variant
-python -m plots.plot_main                        # generate paper figures
+python -m plots.plot_main                        # synthetic and 8x8-digit figures
+python -m plots.plot_regularizer_mnist_gpu       # MNIST regularizer figure
+python -m plots.plot_regularizer_cifar_gpu       # CIFAR-10/100 regularizer figures
+python -m plots.plot_regularizer_digits_samples     # 8x8-digit completions
+python -m plots.plot_regularizer_mnist_samples      # MNIST MLP completions
+python -m plots.plot_regularizer_mnist_gpu_samples  # MNIST CNN completions
+python -m plots.plot_regularizer_cifar_gpu_samples  # CIFAR-10/100 completions
 pytest                                           # run tests
 ```
 
