@@ -1,0 +1,20 @@
+base:
+  n_test: 8192
+  context_dim: 80
+  target_dim: 1
+  r_star: 32
+  K: 64
+  d: 16
+  target_mode: rank_gap_spectrum
+  subspace_operator: whitened_raw
+  spectrum_trace: 64.0
+  spectrum_decay: 0.35
+  spectrum_gap_rank: 16
+  target_strength_slope: 1.0
+  alpha: 1.0
+  overlap: 0.0
+  sigma_z: 0.25
+  sigma_y: 0.25
+sweep:
+  n_train: [512, 1024, 2048, 4096, 8192, 16384]
+  seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

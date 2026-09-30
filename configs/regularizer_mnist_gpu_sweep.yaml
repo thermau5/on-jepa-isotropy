@@ -1,0 +1,22 @@
+# Hyperparameter search over reg_weight and cov_weight (3 seeds for speed).
+# Run this first to pick the best (reg_weight, cov_weight) before the full 10-seed run.
+base:
+  n_train: 10000
+  encoder_channels: [64, 128, 256]
+  embedding_dim: 256
+  predictor_dim: 256
+  hidden_dim: 512
+  use_residual: false
+  epochs: 50
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.0001
+  use_amp: true
+  use_cosine_lr: true
+  n_directions: 128
+
+sweep:
+  method: [baseline, encoder_gaussian, predictive_gaussian, both]
+  reg_weight: [0.01, 0.03, 0.08, 0.15]
+  cov_weight: [0.5, 1.0, 3.0]
+  seed: [0, 1, 2]

@@ -1,0 +1,18 @@
+base:
+  n_train: 8192
+  n_test: 8192
+  context_dim: 64
+  target_dim: 1
+  r_star: 24
+  K: 24
+  d: 24
+  sigma_z: 0.25
+  sigma_y: 0.25
+  target_mode: fixed_trace_spectrum
+  spectrum_decay: 0.90
+  spectrum_trace: 24.0
+
+sweep:
+  context_law: [gaussian, laplace]
+  gauge_type: [identity, orthogonal, diagonal, gaussianized]
+  seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

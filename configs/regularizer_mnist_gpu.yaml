@@ -1,0 +1,20 @@
+base:
+  n_train: 10000
+  encoder_channels: [64, 128, 256]
+  embedding_dim: 256
+  predictor_dim: 256
+  hidden_dim: 512
+  use_residual: false
+  epochs: 50
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.0001
+  use_amp: true
+  use_cosine_lr: true
+  reg_weight: 0.08
+  cov_weight: 1.0
+  n_directions: 128
+
+sweep:
+  method: [baseline, encoder_gaussian, predictive_gaussian, both]
+  seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

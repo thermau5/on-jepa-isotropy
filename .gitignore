@@ -1,0 +1,11 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Raw datasets (downloaded on demand)
+data/mnist_raw/
+data/cifar_raw/
+
+# Generated outputs
+results/
+figures/
