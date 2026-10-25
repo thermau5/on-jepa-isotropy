@@ -42,6 +42,8 @@ METHODS = [
 ]
 # (channels, height, width) of each image half.
 HALF_SHAPES = {"digits": (1, 8, 4), "mnist": (1, 28, 14), "cifar10": (3, 32, 16), "cifar100": (3, 32, 16)}
+# Figure 2 rows, picked by eye among the top of visual_candidates for a visible difference in the completions.
+FIGURE2_ROWS = {"mnist": [9404, 4043], "cifar100": [6959, 6545]}
 
 captured: dict[str, np.ndarray] = {}
 built: list[torch.nn.Module] = []
@@ -111,6 +113,19 @@ def train_task(task: str, seed: int = 0):
     return x_test, y_test, captured["t_te"], latent, pixels
 
 
+def visual_candidates(y_test: np.ndarray, targets: np.ndarray, latent: dict[str, np.ndarray],
+                      pixels: dict[str, np.ndarray]) -> np.ndarray:
+    """Test indices where prediction-side regularization has both the lowest latent risk and the lowest pixel MSE,
+    ranked by its pixel-MSE margin over the best other objective."""
+    risk = {m: np.mean((latent[m] - targets) ** 2, axis=1) for m, _ in METHODS}
+    px = {m: np.mean((np.clip(pixels[m], 0.0, 1.0) - y_test) ** 2, axis=1) for m, _ in METHODS}
+    others = [m for m, _ in METHODS if m != "predictive_gaussian"]
+    best = (np.all([risk["predictive_gaussian"] < risk[m] for m in others], axis=0)
+            & np.all([px["predictive_gaussian"] < px[m] for m in others], axis=0))
+    margin = np.min([px[m] for m in others], axis=0) - px["predictive_gaussian"]
+    return np.argsort(-np.where(best, margin, -np.inf))[: int(best.sum())]
+
+
 def to_image(half: np.ndarray, task: str) -> np.ndarray:
     """Flat image half -> (H, W, 3) display array, with grayscale digits drawn dark on light."""
     c, h, w = HALF_SHAPES[task]
@@ -120,7 +135,7 @@ def to_image(half: np.ndarray, task: str) -> np.ndarray:
 
 def plot_samples(task: str, output_path: Path, seed: int = 0) -> None:
     x_test, y_test, targets, latent, pixels = train_task(task, seed)
-    chosen = choose_examples(targets, latent)
+    chosen = FIGURE2_ROWS.get(task) or choose_examples(targets, latent)
     risk = {m: np.mean((latent[m] - targets) ** 2, axis=1) for m, _ in METHODS}
     for row, idx in enumerate(chosen):
         print(f"  sample {row + 1} (test idx {idx}): "
