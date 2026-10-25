@@ -1,0 +1,35 @@
+# Latent-target JEPA on mnist with a frozen PCA-whitening teacher (experiments/exp_jepa_images.py).
+# Same encoder, predictor, decoder and optimizer as regularizer_mnist_gpu.yaml, with a 64-dimensional
+# embedding, prediction and teacher. The decoder is a separate pixel head on detached predictions.
+# Strengths are chosen on 5000 validation images drawn from the training images outside the
+# training split. Three sweeps: the unregularized baseline across encoder and predictor weight
+# decay (a plain shrinkage baseline), the regularizers with Eq. 4.2 as written (unit scale), and the
+# prediction-side regularizers with the trace-normalized target.
+base:
+  dataset: mnist
+  n_train: 10000
+  n_val: 5000
+  encoder_channels: [64, 128, 256]
+  embedding_dim: 64
+  hidden_dim: 512
+  epochs: 50
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.0001
+  pixel_weight_decay: 0.0001
+  use_amp: true
+  cov_weight: 1.0
+  n_directions: 128
+
+sweep:
+  - method: [baseline]
+    weight_decay: [0.0001, 0.01, 0.1, 1.0, 3.0, 10.0, 30.0]
+    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  - method: [encoder_gaussian, predictive_gaussian, both]
+    predictive_scale: [unit]
+    reg_weight: [0.8, 2.4, 8.0, 24.0, 80.0]
+    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  - method: [predictive_gaussian, both]
+    predictive_scale: [trace]
+    reg_weight: [0.8, 2.4, 8.0, 24.0, 80.0]
+    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

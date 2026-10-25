@@ -36,6 +36,14 @@ class DigitsConfig:
     test_size: float = 0.30
     method: str = "baseline"
     seed: int = 0
+    # Where the prediction-side penalty acts:
+    #   "latent": predictor output p, before the pixel head (a latent proxy of Eq. 4.2);
+    #   "intrinsic": Eq. 4.2's intrinsic predicted output R p, with the N(0, I) target;
+    #   "intrinsic_normalized": the same output rescaled to trace d, i.e. N(0, (tau/d) I) at its own trace tau.
+    predictive_target: str = "latent"
+
+
+PREDICTIVE_TARGETS = ("latent", "intrinsic", "intrinsic_normalized")
 
 
 class DigitJEPA(torch.nn.Module):
@@ -73,6 +81,22 @@ def load_digit_halves(seed: int, test_size: float) -> tuple[np.ndarray, np.ndarr
         random_state=seed,
         stratify=digits.target,
     )
+
+
+def intrinsic_output(head: torch.nn.Linear, p: torch.Tensor, normalize: bool = False) -> torch.Tensor:
+    """Intrinsic predicted output of Eq. 4.2 for a linear pixel head.
+
+    With the head weight D = Q R (thin QR), the prediction D p + b lies in range(D), and its
+    coordinates in the orthonormal basis Q are Q^T D p = R p. Any other orthonormal basis of
+    the predictive range, such as the U_K of Eq. 4.2, differs from Q by a rotation.
+    """
+    _, r = torch.linalg.qr(head.weight, mode="reduced")
+    q = p @ r.T
+    if normalize:
+        q = q - q.mean(dim=0, keepdim=True)
+        scale = (q.square().sum(dim=1).mean() / q.shape[1]).sqrt()
+        q = q / scale.clamp_min(1e-12)
+    return q
 
 
 def fixed_directions(dim: int, count: int, seed: int) -> torch.Tensor:
@@ -131,6 +155,8 @@ def projected_gaussianity_score(samples: np.ndarray, directions: np.ndarray) -> 
 
 def train_one(params: dict[str, Any]) -> dict[str, Any]:
     cfg = DigitsConfig(**params)
+    if cfg.predictive_target not in PREDICTIVE_TARGETS:
+        raise ValueError(f"predictive_target must be one of {PREDICTIVE_TARGETS}, got {cfg.predictive_target!r}")
     start_time = time.perf_counter()
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -164,8 +190,12 @@ def train_one(params: dict[str, Any]) -> dict[str, Any]:
                 reg = reg + projected_gaussianity_loss(z, z_dirs)
                 reg = reg + cfg.cov_weight * covariance_standard_normal_loss(z)
             if cfg.method in {"predictive_gaussian", "both"}:
-                reg = reg + projected_gaussianity_loss(p, p_dirs)
-                reg = reg + cfg.cov_weight * covariance_standard_normal_loss(p)
+                if cfg.predictive_target == "latent":
+                    penalized = p
+                else:
+                    penalized = intrinsic_output(model.head, p, cfg.predictive_target == "intrinsic_normalized")
+                reg = reg + projected_gaussianity_loss(penalized, p_dirs)
+                reg = reg + cfg.cov_weight * covariance_standard_normal_loss(penalized)
             loss = pred_loss + cfg.reg_weight * reg
             optimizer.zero_grad()
             loss.backward()
@@ -184,9 +214,14 @@ def train_one(params: dict[str, Any]) -> dict[str, Any]:
     p_dir_np = p_dirs.numpy()
     z_metrics = covariance_metrics(z_np)
     p_metrics = covariance_metrics(p_np)
+    with torch.no_grad():
+        q_np = intrinsic_output(model.head, test_p).numpy()
+        q_norm_np = intrinsic_output(model.head, test_p, normalize=True).numpy()
+    q_metrics = covariance_metrics(q_np)
     return {
         "experiment": "regularizer_digits",
         "method": cfg.method,
+        "predictive_target": cfg.predictive_target,
         "seed": cfg.seed,
         "epochs": cfg.epochs,
         "batch_size": cfg.batch_size,
@@ -205,6 +240,12 @@ def train_one(params: dict[str, Any]) -> dict[str, Any]:
         "predictive_isotropy_error": p_metrics["isotropy_error"],
         "predictive_min_std": p_metrics["min_std"],
         "predictive_gaussianity_score": projected_gaussianity_score(p_np, p_dir_np),
+        "intrinsic_kappa": q_metrics["kappa"],
+        "intrinsic_effective_rank": q_metrics["effective_rank"],
+        "intrinsic_isotropy_error": q_metrics["isotropy_error"],
+        "intrinsic_trace": float(np.trace(np.cov(q_np, rowvar=False))),
+        "intrinsic_gaussianity_score": projected_gaussianity_score(q_np, p_dir_np),
+        "intrinsic_gaussianity_score_normalized": projected_gaussianity_score(q_norm_np, p_dir_np),
     }
 
 

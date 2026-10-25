@@ -143,11 +143,14 @@ def load_cifar_halves_gpu(
     dataset: str,
     seed: int,
     n_train: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    n_val: int = 0,
+) -> tuple[np.ndarray, ...]:
     """Return (x_train, x_test, y_train, y_test) as float32 arrays in [0,1].
 
     Context = left half (1536,), target = right half (1536,), both flattened
-    channel-first. n_train=0 uses all 50k training examples.
+    channel-first. n_train=0 uses all 50k training examples. n_val > 0 also returns
+    (x_val, y_val), drawn from the training images outside the training split, so the
+    training split is unchanged.
     """
     CIFAR_ROOT.mkdir(parents=True, exist_ok=True)
     if dataset == "cifar10":
@@ -164,8 +167,10 @@ def load_cifar_halves_gpu(
 
     if n_train > 0 and n_train < len(x_all):
         idx = np.arange(len(x_all))
-        train_idx, _ = train_test_split(idx, train_size=n_train, stratify=labels_all, random_state=seed)
+        train_idx, rest_idx = train_test_split(idx, train_size=n_train, stratify=labels_all, random_state=seed)
         x_tr = x_all[train_idx]
+    elif n_val > 0:
+        raise ValueError("n_val needs n_train below the 50k training examples")
     else:
         x_tr = x_all
 
@@ -179,7 +184,10 @@ def load_cifar_halves_gpu(
 
     ctx_tr, tgt_tr = halves(x_tr)
     ctx_te, tgt_te = halves(x_te)
-    return ctx_tr, ctx_te, tgt_tr, tgt_te
+    if n_val == 0:
+        return ctx_tr, ctx_te, tgt_tr, tgt_te
+    val_idx, _ = train_test_split(rest_idx, train_size=n_val, stratify=labels_all[rest_idx], random_state=seed)
+    return (ctx_tr, ctx_te, tgt_tr, tgt_te, *halves(x_all[val_idx]))
 
 
 # ---------------------------------------------------------------------------

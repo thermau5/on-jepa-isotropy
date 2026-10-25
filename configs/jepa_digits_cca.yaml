@@ -1,0 +1,27 @@
+# Latent-target JEPA on 8x8 digits with the predictively isotropic CCA teacher (experiments/exp_jepa_digits.py).
+# The teacher is the top 16 canonical variates of the right half against the left half, each divided by
+# its canonical correlation, so the 16-dimensional embedding and prediction have the same width.
+# Everything else as in jepa_digits.yaml. Strengths are chosen on 500 validation images drawn from the
+# held-out split.
+base:
+  epochs: 400
+  batch_size: 32
+  lr: 0.001
+  weight_decay: 0.0
+  pixel_weight_decay: 0.0
+  hidden_dim: 512
+  embedding_dim: 16
+  teacher: cca
+  teacher_dim: 16
+  cov_weight: 10.0
+  n_directions: 32
+  test_size: 0.92
+  n_val: 500
+
+sweep:
+  - method: [baseline]
+    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  - method: [encoder_gaussian, predictive_gaussian, both]
+    predictive_scale: [unit]
+    reg_weight: [0.05, 0.15, 0.5, 1.5, 5.0, 15.0, 50.0, 150.0, 500.0, 1500.0, 5000.0]
+    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

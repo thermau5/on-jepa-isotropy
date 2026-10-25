@@ -1,0 +1,20 @@
+# Same as regularizer_digits.yaml, but the prediction-side penalty acts on Eq. 4.2's
+# intrinsic predicted output R p (head weight D = Q R), rescaled to trace d, so the
+# target is N(0, (tau/d) I) at the output's own trace tau.
+base:
+  epochs: 400
+  batch_size: 32
+  lr: 0.001
+  weight_decay: 0.0
+  hidden_dim: 512
+  embedding_dim: 16
+  predictor_dim: 16
+  reg_weight: 0.50
+  cov_weight: 10.0
+  n_directions: 32
+  test_size: 0.92
+  predictive_target: intrinsic_normalized
+
+sweep:
+  method: [baseline, encoder_gaussian, predictive_gaussian, both]
+  seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

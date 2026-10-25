@@ -1,0 +1,32 @@
+# Latent-target JEPA on cifar100 with the predictively isotropic CCA teacher (experiments/exp_jepa_images.py).
+# The teacher is the top 16 canonical variates of the right half against the left half, each divided by
+# its canonical correlation, so the best linear predictor outputs N(0, I_16), the target of Eq. 4.2.
+# A convolutional encoder with a 16-dimensional embedding feeds a linear 16 -> 16 predictor, so embedding
+# and prediction have the same width, and the encoder and predictor train with weight decay 2. Strengths are
+# chosen on 5000 validation images drawn from the training images outside the training split.
+base:
+  dataset: cifar100
+  n_train: 10000
+  n_val: 5000
+  encoder_channels: [64, 128, 256]
+  embedding_dim: 16
+  predictor: linear
+  teacher: cca
+  teacher_dim: 16
+  hidden_dim: 512
+  epochs: 50
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 2.0
+  pixel_weight_decay: 0.0001
+  use_amp: true
+  cov_weight: 1.0
+  n_directions: 128
+
+sweep:
+  - method: [baseline]
+    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  - method: [encoder_gaussian, predictive_gaussian, both]
+    predictive_scale: [unit]
+    reg_weight: [0.08, 0.24, 0.8, 2.4, 8.0, 24.0]
+    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

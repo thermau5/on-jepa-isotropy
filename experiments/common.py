@@ -152,15 +152,17 @@ def load_config(path: str | Path) -> dict[str, Any]:
 
 
 def expanded_grid(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Cartesian product of the sweep over the base; a list of sweeps concatenates their grids."""
     base = dict(config.get("base", {}))
-    sweep = dict(config.get("sweep", {}))
-    keys = list(sweep)
-    values = [sweep[key] for key in keys]
+    sweeps = config.get("sweep", {})
     rows = []
-    for combo in itertools.product(*values):
-        row = dict(base)
-        row.update(dict(zip(keys, combo)))
-        rows.append(row)
+    for sweep in sweeps if isinstance(sweeps, list) else [sweeps]:
+        keys = list(sweep)
+        values = [sweep[key] for key in keys]
+        for combo in itertools.product(*values):
+            row = dict(base)
+            row.update(dict(zip(keys, combo)))
+            rows.append(row)
     return rows
 
 

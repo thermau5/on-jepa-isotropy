@@ -62,7 +62,15 @@ python -m experiments.exp_regularizer_cifar_gpu  # CIFAR-10 regularizer diagnost
 python -m experiments.exp_regularizer_cifar_gpu \
     --config configs/regularizer_cifar100.yaml \
     --output results/exp_regularizer_cifar100.csv  # CIFAR-100 variant
+python -m experiments.exp_jepa_digits \
+    --config configs/jepa_digits_cca.yaml \
+    --output results/exp_jepa_digits_cca.csv     # latent-target JEPA on 8x8 digits
+python -m experiments.exp_jepa_images \
+    --config configs/jepa_mnist_cca.yaml \
+    --output results/exp_jepa_mnist_cca.csv      # latent-target JEPA on MNIST (same for cifar10, cifar100)
+python -m experiments.exp_jepa_shape            # whitened encoder-embedding Gaussianity of the selected runs
 python -m plots.plot_main                        # synthetic and 8x8-digit figures
+python -m plots.plot_jepa_diagnostics           # latent-target JEPA figures
 python -m plots.plot_regularizer_mnist_gpu       # MNIST regularizer figure
 python -m plots.plot_regularizer_cifar_gpu       # CIFAR-10/100 regularizer figures
 python -m plots.plot_regularizer_digits_samples     # 8x8-digit completions
