@@ -9,6 +9,7 @@ import pandas as pd
 from experiments.common import ROOT, run_from_config
 from experiments.exp_gauge_factorization import run as run_gauge_factorization
 from experiments.exp_reduction_diagnostics import run as run_reduction_diagnostics
+from experiments.moment_bounds import run as run_moment_bounds
 from experiments.exp_regularizer_digits import run as run_regularizer_digits
 
 
@@ -29,6 +30,12 @@ def main() -> None:
     for name, config_name, output_name in EXPERIMENTS:
         if name == "gauge_factorization":
             frame = run_gauge_factorization(
+                ROOT / "configs" / config_name,
+                ROOT / "results" / output_name,
+            )
+        elif name in {"unified_risk", "post_saturation"}:
+            frame = run_moment_bounds(
+                name,
                 ROOT / "configs" / config_name,
                 ROOT / "results" / output_name,
             )

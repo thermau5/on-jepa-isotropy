@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from experiments.common import ROOT, parse_args, run_from_config
+from experiments.common import ROOT, parse_args
+from experiments.moment_bounds import run
 
 
 if __name__ == "__main__":
@@ -10,4 +11,4 @@ if __name__ == "__main__":
         ROOT / "configs" / "post_saturation.yaml",
         ROOT / "results" / "exp_post_saturation.csv",
     )
-    run_from_config("post_saturation", Path(args.config), Path(args.output))
+    run("post_saturation", Path(args.config), Path(args.output))

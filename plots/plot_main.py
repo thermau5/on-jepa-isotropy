@@ -259,14 +259,14 @@ def add_left_figure_legend(fig: plt.Figure, ax) -> None:
     legend.get_frame().set_linewidth(0.6)
 
 
-def add_axis_legend(ax) -> None:
+def add_axis_legend(ax, loc: str = "best") -> None:
     legend = ax.legend(
         frameon=True,
         fancybox=False,
         framealpha=0.92,
         edgecolor=GRID,
         facecolor="white",
-        loc="best",
+        loc=loc,
         fontsize=7.0,
         borderpad=0.2,
         handlelength=1.55,
@@ -444,225 +444,67 @@ def plot_post_saturation() -> None:
     plot_post_saturation_frame(frame, FIGURES / "exp_post_saturation.pdf")
 
 
+def theorem_noise_levels(frame: pd.DataFrame, group: str) -> pd.DataFrame:
+    """Add rho_n and eps_n, the largest perturbations over seeds, so both events hold on every run."""
+
+    frame = frame.copy()
+    for column, source in [("rho_n", "rho_hat"), ("eps_n", "eps_hat")]:
+        frame[column] = frame.groupby(group)[source].transform("max")
+    frame["rho_bar"] = frame["rho_n"] + 4.0 * frame["eps_n"]
+    return frame
+
+
 def plot_post_saturation_frame(
     frame: pd.DataFrame,
     output_path: Path,
-    summary_path: Path = RESULTS / "post_saturation_calibrated_bounds.csv",
+    summary_path: Path = RESULTS / "post_saturation_bounds.csv",
 ) -> None:
     configure_matplotlib()
-    frame = frame.copy()
-    delta = 0.1
-    frame["normalized_operator_error"] = (
-        frame["operator_error_op"] / frame["oracle_sigma_top"].clip(lower=1e-12)
-    )
-    empirical_rho_bound = empirical_quantile(
-        frame["normalized_operator_error"],
-        1.0 - delta,
-    )
-    relative_perturbation_coverage = float(
-        np.mean(frame["normalized_operator_error"] <= empirical_rho_bound)
-    )
-    empirical_l_bound = frame["per_target_risk_stability_ratio"].max()
-    kappa = np.sqrt(frame["oracle_relative_conditioning"].clip(lower=1e-12))
-    frame["calibrated_excess_risk_rhs"] = (
-        empirical_l_bound * empirical_rho_bound / (kappa - empirical_rho_bound)
-    )
-    frame["calibrated_total_risk_rhs"] = (
-        frame["oracle_test_mse"] + frame["calibrated_excess_risk_rhs"]
-    )
-    subspace_operator = (
-        str(frame["subspace_operator"].iloc[0])
-        if "subspace_operator" in frame.columns
-        else "cross_cov"
-    )
-    if subspace_operator == "whitened_raw":
-        eigen_ylabel = r"Eigenvalues of $T_K^\top T_K$"
-        kappa_ylabel = r"$\kappa_K^2(T_K)$"
-        effdim_ylabel = r"$r(T_K)$"
-        stability_label = r"Lipschitz bound"
-    else:
-        eigen_ylabel = r"Eigenvalues of $G_K$"
-        kappa_ylabel = r"$\kappa_K^2=\lambda_d/\lambda_1$"
-        effdim_ylabel = r"$r(\Sigma_{YX})$"
-        stability_label = r"Lipschitz bound"
+    frame = theorem_noise_levels(frame, "K")
+    frame["half_gap"] = 0.5 * np.sqrt(frame["kappa_sq"])
+    # Proposition 3.11: excess risk at most 7 L rho_bar^2 / kappa_K^2 under the half-gap condition.
+    frame["excess_risk_bound"] = 7.0 * frame["lipschitz"] * frame["rho_bar"] ** 2 / frame["kappa_sq"]
+    frame["risk_bound"] = frame["oracle_risk"] + frame["excess_risk_bound"]
     summary = mean_sem(
         frame,
         "K",
         [
             "lambda_top",
-            "oracle_lambda_top",
-            "lambda_at_bottleneck_rank",
-            "oracle_lambda_at_bottleneck_rank",
-            "relative_conditioning",
-            "oracle_relative_conditioning",
-            "theorem_subspace_error",
-            "per_target_excess_mse",
-            "test_mse",
-            "oracle_test_mse",
-            "oracle_effdim",
-            "empirical_effdim",
-            "per_target_risk_stability_ratio",
-            "calibrated_excess_risk_rhs",
-            "calibrated_total_risk_rhs",
+            "lambda_r",
+            "lambda_top_hat",
+            "lambda_r_hat",
+            "kappa_sq",
+            "kappa_sq_hat",
+            "s_perturbation",
+            "rho_bar",
+            "half_gap",
+            "excess_risk",
+            "lipschitz_bound",
+            "excess_risk_bound",
+            "population_risk",
+            "risk_bound",
         ],
     )
-    summary["per_target_excess_mse_mean"] = summary["per_target_excess_mse_mean"].clip(
-        lower=1e-6
-    )
-    summary["per_target_excess_mse_sem"] = summary["per_target_excess_mse_sem"].fillna(0.0)
-    summary["risk_stability_bound_mean"] = (
-        empirical_l_bound * summary["theorem_subspace_error_mean"]
-    ).clip(lower=1e-6)
-    summary["risk_stability_bound_sem"] = (
-        empirical_l_bound * summary["theorem_subspace_error_sem"].fillna(0.0)
-    )
-    summary["delta"] = delta
-    summary["calibrated_rho"] = empirical_rho_bound
-    summary["empirical_l"] = empirical_l_bound
-    summary["relative_perturbation_coverage"] = relative_perturbation_coverage
     summary.to_csv(summary_path, index=False)
     fig, axes_grid = plt.subplots(2, 3, figsize=(7.1, 3.3), constrained_layout=True)
     fig.set_constrained_layout_pads(w_pad=0.02, h_pad=0.015, wspace=0.02, hspace=0.028)
     axes = list(axes_grid.ravel())
-    dashed_theory(
-        axes[0],
-        summary,
-        "K",
-        "oracle_lambda_top",
-        label=r"Pop. $\lambda_1$",
-        zorder=1,
-    )
-    dashed_theory(
-        axes[0],
-        summary,
-        "K",
-        "oracle_lambda_at_bottleneck_rank",
-        label=r"Pop. $\lambda_d$",
-        zorder=1,
-    )
-    line_with_band(
-        axes[0],
-        summary,
-        "K",
-        "lambda_top",
-        r"Finite $\lambda_1$",
-        color=RED,
-        marker="s",
-        zorder=4,
-    )
-    line_with_band(
-        axes[0],
-        summary,
-        "K",
-        "lambda_at_bottleneck_rank",
-        r"Finite $\lambda_d$",
-        color=BLUE,
-        marker="o",
-        zorder=5,
-    )
-    dashed_theory(
-        axes[1],
-        summary,
-        "K",
-        "oracle_relative_conditioning",
-        label="Population",
-    )
-    line_with_band(
-        axes[1],
-        summary,
-        "K",
-        "relative_conditioning",
-        "Finite sample",
-    )
-    dashed_theory(
-        axes[2],
-        summary,
-        "K",
-        "oracle_effdim",
-        label="Population",
-    )
-    line_with_band(
-        axes[2],
-        summary,
-        "K",
-        "empirical_effdim",
-        "Finite sample",
-    )
-    line_with_band_floor(
-        axes[3],
-        summary,
-        "K",
-        "per_target_excess_mse",
-        "Excess risk",
-        floor=1e-6,
-        color=BLUE,
-        marker="o",
-    )
-    bound_lower = (
-        summary["risk_stability_bound_mean"] - summary["risk_stability_bound_sem"]
-    ).clip(lower=1e-6)
-    bound_upper = (
-        summary["risk_stability_bound_mean"] + summary["risk_stability_bound_sem"]
-    ).clip(lower=1e-6)
-    axes[3].plot(
-        summary["K"],
-        summary["risk_stability_bound_mean"],
-        color=THEORY,
-        linestyle="--",
-        linewidth=THEORY_LINE_WIDTH,
-        alpha=0.9,
-        label=stability_label,
-        zorder=1,
-    )
-    axes[3].errorbar(
-        summary["K"],
-        summary["risk_stability_bound_mean"],
-        yerr=[
-            (summary["risk_stability_bound_mean"] - bound_lower).clip(lower=0.0),
-            (bound_upper - summary["risk_stability_bound_mean"]).clip(lower=0.0),
-        ],
-        fmt="none",
-        ecolor=THEORY,
-        elinewidth=0.65,
-        capsize=0.0,
-        alpha=0.35,
-        zorder=1,
-    )
-    dashed_theory(
-        axes[4],
-        summary,
-        "K",
-        "calibrated_excess_risk_rhs",
-        label="Excess-risk bound",
-        floor=1e-6,
-        zorder=1,
-    )
-    line_with_band_floor(
-        axes[4],
-        summary,
-        "K",
-        "per_target_excess_mse",
-        "Excess risk",
-        floor=1e-6,
-        color=BLUE,
-        marker="o",
-        zorder=4,
-    )
-    dashed_theory(
-        axes[5],
-        summary,
-        "K",
-        "calibrated_total_risk_rhs",
-        label="Risk-decomp. bound",
-        zorder=1,
-    )
-    line_with_band(
-        axes[5],
-        summary,
-        "K",
-        "test_mse",
-        "Finite-sample risk",
-    )
+    dashed_theory(axes[0], summary, "K", "lambda_top", label=r"Pop. $\lambda_1$", zorder=1)
+    dashed_theory(axes[0], summary, "K", "lambda_r", label=r"Pop. $\lambda_d$", zorder=1)
+    line_with_band(axes[0], summary, "K", "lambda_top_hat", r"Finite $\lambda_1$", color=RED, marker="s", zorder=4)
+    line_with_band(axes[0], summary, "K", "lambda_r_hat", r"Finite $\lambda_d$", color=BLUE, marker="o", zorder=5)
+    dashed_theory(axes[1], summary, "K", "kappa_sq", label="Population")
+    line_with_band(axes[1], summary, "K", "kappa_sq_hat", "Finite sample")
+    line_with_band(axes[2], summary, "K", "s_perturbation", "Observed", color=BLUE)
+    axes[2].plot(summary["K"], summary["rho_bar_mean"], color=TEAL, linestyle="--",
+                 linewidth=THEORY_LINE_WIDTH, label=r"$\bar\rho_n$")
+    dashed_theory(axes[2], summary, "K", "half_gap", label=r"$\kappa_K/2$")
+    line_with_band(axes[3], summary, "K", "excess_risk", "Excess risk", color=BLUE)
+    dashed_theory(axes[3], summary, "K", "lipschitz_bound", label="Lipschitz bound")
+    line_with_band(axes[4], summary, "K", "excess_risk", "Excess risk", color=BLUE, zorder=4)
+    dashed_theory(axes[4], summary, "K", "excess_risk_bound", label="Excess-risk bound")
+    line_with_band(axes[5], summary, "K", "population_risk", "Finite sample")
+    dashed_theory(axes[5], summary, "K", "risk_bound", label="Risk bound")
     for ax in axes:
         ax.set_xscale("log", base=2)
         ticks = [int(x) for x in summary["K"] if x in {64, 128, 256, 512}]
@@ -670,49 +512,22 @@ def plot_post_saturation_frame(
         ax.set_xticklabels([str(x) for x in ticks])
     for ax in axes[:3]:
         ax.tick_params(axis="x", which="major", bottom=True, labelbottom=True)
-    axes[0].set_yscale("log")
-    axes[3].set_yscale("log")
-    axes[4].set_yscale("log")
-    axes[5].set_yscale("log")
-    compact_excess_ticks = [3e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2]
-    set_compact_log_tick_labels(axes[3], compact_excess_ticks)
-    set_compact_log_tick_labels(axes[4], compact_excess_ticks)
+    for ax in [axes[0], *axes[2:]]:
+        ax.set_yscale("log")
     axes[1].set_ylim(-0.03, 1.03)
-    add_axis_legend(axes[0])
-    add_axis_legend(axes[1])
-    add_axis_legend(axes[2])
-    add_axis_legend(axes[3])
-    add_axis_legend(axes[4])
-    add_axis_legend(axes[5])
-    style_axis(axes[0], "Target count $K$", eigen_ylabel, "(a)")
-    style_axis(axes[1], "Target count $K$", kappa_ylabel, "(b)")
-    style_axis(
-        axes[2],
-        "Target count $K$",
-        effdim_ylabel,
-        "(c)",
-    )
+    axes[2].set_ylim(8e-4, 8.0)
+    for ax in axes:
+        add_axis_legend(ax, loc="upper left" if ax is axes[2] else "best")
+    style_axis(axes[0], "Target count $K$", r"Eigenvalues of $T_K^\top T_K$", "(a)")
+    style_axis(axes[1], "Target count $K$", r"$\kappa_K^2(T_K)$", "(b)")
+    style_axis(axes[2], "Target count $K$", "Rel. perturbation", "(c)")
     for ax in axes[:3]:
         ax.xaxis.labelpad = -0.5
-    style_axis(
-        axes[3],
-        "Target count $K$",
-        "Per-target excess risk",
-        "(d)",
-    )
-    style_axis(
-        axes[4],
-        "Target count $K$",
-        "Per-target excess MSE",
-        "(e)",
-    )
-    style_axis(
-        axes[5],
-        "Target count $K$",
-        "Per-target MSE",
-        "(f)",
-    )
+    style_axis(axes[3], "Target count $K$", "Per-target excess risk", "(d)")
+    style_axis(axes[4], "Target count $K$", "Per-target excess risk", "(e)")
+    style_axis(axes[5], "Target count $K$", "Per-target risk", "(f)")
     save_figure(fig, output_path)
+
 
 
 def empirical_quantile(values: pd.Series, probability: float) -> float:
@@ -1322,219 +1137,82 @@ def plot_bottleneck() -> None:
 
 
 def plot_unified_risk() -> None:
-    frame = pd.read_csv(RESULTS / "exp_unified_risk.csv").copy()
-    delta = 0.1
-    rho_by_n = frame.groupby("n_train")["normalized_operator_error"].apply(
-        lambda values: empirical_quantile(values, 1.0 - delta)
-    )
-    coverage_by_n = {
-        n_train: float(
-            np.mean(group["normalized_operator_error"] <= rho_by_n.loc[n_train])
-        )
-        for n_train, group in frame.groupby("n_train")
-    }
-    frame["rho_hat"] = frame["n_train"].map(rho_by_n)
-    frame["rho_coverage"] = frame["n_train"].map(coverage_by_n)
-    empirical_l_bound = frame["rank_r_risk_stability_ratio"].max()
-    frame["retained_recovery_bound"] = (
-        frame["rho_hat"]
-        / (frame["retained_relative_gap"] - frame["rho_hat"]).clip(lower=1e-12)
-    )
-    frame["rank_r_lipschitz_bound"] = (
-        empirical_l_bound * frame["retained_subspace_error"]
-    )
-    frame["unified_excess_bound"] = (
-        empirical_l_bound * frame["retained_recovery_bound"]
-    )
-    frame["unified_risk_bound"] = (
-        frame["population_rank_r_mse"] + frame["unified_excess_bound"]
-    )
+    frame = theorem_noise_levels(pd.read_csv(RESULTS / "exp_unified_risk.csv"), "n_train")
+    gap_margin = frame["relative_gap"] - frame["rho_bar"]
+    frame["wedin_bound"] = frame["rho_bar"] / gap_margin
+    # Theorem 3.15: excess risk at most 3 L rho_bar^2 / (gap - rho_bar)^2 under Assumption 3.13.
+    frame["risk_bound"] = frame["oracle_risk"] + 3.0 * frame["lipschitz"] * frame["rho_bar"] ** 2 / gap_margin**2
     metrics = [
-        "test_mse",
-        "oracle_test_mse",
-        "population_tail_per_target",
-        "population_rank_r_mse",
-        "rank_r_excess_mse",
-        "normalized_operator_error",
-        "rho_hat",
-        "sigma_at_bottleneck_rank",
-        "sigma_after_bottleneck_rank",
-        "oracle_sigma_at_bottleneck_rank",
-        "oracle_sigma_after_bottleneck_rank",
-        "retained_relative_gap",
-        "retained_subspace_error",
-        "retained_recovery_bound",
-        "rank_r_lipschitz_bound",
-        "unified_excess_bound",
-        "unified_risk_bound",
-        "rho_coverage",
+        "sigma_r",
+        "sigma_r_next",
+        "sigma_r_hat",
+        "sigma_r_next_hat",
+        "population_risk",
+        "oracle_risk",
+        "ols_floor",
+        "s_perturbation",
+        "rho_bar",
+        "relative_gap",
+        "sin_theta",
+        "wedin_bound",
+        "excess_risk",
+        "lipschitz_bound",
+        "risk_bound",
     ]
     summary = mean_sem(frame, "n_train", metrics)
-    summary.to_csv(RESULTS / "unified_risk_calibrated_bounds.csv", index=False)
+    summary.to_csv(RESULTS / "unified_risk_bounds.csv", index=False)
 
     fig, axes_grid = plt.subplots(2, 3, figsize=(7.1, 3.3), constrained_layout=True)
     fig.set_constrained_layout_pads(w_pad=0.02, h_pad=0.015, wspace=0.02, hspace=0.028)
     axes = list(axes_grid.ravel())
 
-    dashed_theory(
-        axes[0],
-        summary,
-        "n_train",
-        "oracle_sigma_at_bottleneck_rank",
-        label=r"Pop. $\sigma_r$",
-        zorder=1,
-    )
-    dashed_theory(
-        axes[0],
-        summary,
-        "n_train",
-        "oracle_sigma_after_bottleneck_rank",
-        label=r"Pop. $\sigma_{r+1}$",
-        zorder=1,
-    )
-    line_with_band(
-        axes[0],
-        summary,
-        "n_train",
-        "sigma_at_bottleneck_rank",
-        r"Finite $\sigma_r$",
-        color=RED,
-        marker="s",
-        zorder=4,
-    )
-    line_with_band(
-        axes[0],
-        summary,
-        "n_train",
-        "sigma_after_bottleneck_rank",
-        r"Finite $\sigma_{r+1}$",
-        color=BLUE,
-        marker="o",
-        zorder=5,
-    )
+    dashed_theory(axes[0], summary, "n_train", "sigma_r", label=r"Pop. $\sigma_r$", zorder=1)
+    dashed_theory(axes[0], summary, "n_train", "sigma_r_next", label=r"Pop. $\sigma_{r+1}$", zorder=1)
+    line_with_band(axes[0], summary, "n_train", "sigma_r_hat", r"Finite $\sigma_r$", color=RED, marker="s", zorder=4)
+    line_with_band(axes[0], summary, "n_train", "sigma_r_next_hat", r"Finite $\sigma_{r+1}$", color=BLUE, marker="o",
+                   zorder=5)
 
-    line_with_band(axes[1], summary, "n_train", "test_mse", "Finite sample")
-    dashed_theory(
-        axes[1],
-        summary,
-        "n_train",
-        "population_rank_r_mse",
-        label=r"Population rank-$r$",
-    )
-    dashed_theory(
-        axes[1],
-        summary,
-        "n_train",
-        "oracle_test_mse",
-        label="Raw OLS floor",
-        color=GRAY,
-        linestyle=":",
-        alpha=0.75,
-    )
+    line_with_band(axes[1], summary, "n_train", "population_risk", "Finite sample")
+    dashed_theory(axes[1], summary, "n_train", "oracle_risk", label=r"Population rank-$r$")
+    dashed_theory(axes[1], summary, "n_train", "ols_floor", label="Raw OLS floor", color=GRAY, linestyle=":",
+                  alpha=0.75)
 
-    line_with_band(
-        axes[2],
-        summary,
-        "n_train",
-        "normalized_operator_error",
-        r"Observed $\hat\eta$",
-        color=BLUE,
-    )
-    axes[2].plot(
-        summary["n_train"],
-        summary["rho_hat_mean"],
-        color=TEAL,
-        linestyle="--",
-        linewidth=THEORY_LINE_WIDTH,
-        label=r"$\hat\rho_{0.9}$",
-    )
-    axes[2].plot(
-        summary["n_train"],
-        summary["retained_relative_gap_mean"],
-        color=THEORY,
-        linestyle="--",
-        linewidth=THEORY_LINE_WIDTH,
-        label=r"Gap $\Delta_{K,r}$",
-    )
+    line_with_band(axes[2], summary, "n_train", "s_perturbation", "Observed", color=BLUE)
+    axes[2].plot(summary["n_train"], summary["rho_bar_mean"], color=TEAL, linestyle="--",
+                 linewidth=THEORY_LINE_WIDTH, label=r"$\bar\rho_n$")
+    dashed_theory(axes[2], summary, "n_train", "relative_gap", label=r"Gap $\bar\Delta_{K,r}$")
 
-    line_with_band(
-        axes[3],
-        summary,
-        "n_train",
-        "retained_subspace_error",
-        r"Observed",
-        color=BLUE,
-    )
-    dashed_theory(
-        axes[3],
-        summary,
-        "n_train",
-        "retained_recovery_bound",
-        label="Wedin bound",
-    )
+    line_with_band(axes[3], summary, "n_train", "sin_theta", "Observed", color=BLUE)
+    dashed_theory(axes[3], summary, "n_train", "wedin_bound", label="Wedin bound")
 
-    line_with_band_floor(
-        axes[4],
-        summary,
-        "n_train",
-        "rank_r_excess_mse",
-        r"Excess over $R_K^\star(r)$",
-        floor=1e-4,
-        color=BLUE,
-        marker="o",
-    )
-    dashed_theory(
-        axes[4],
-        summary,
-        "n_train",
-        "rank_r_lipschitz_bound",
-        label="Lipschitz bound",
-        floor=1e-4,
-    )
+    line_with_band(axes[4], summary, "n_train", "excess_risk", r"Excess over $\mathcal{R}_K^\star(r)$", color=BLUE)
+    dashed_theory(axes[4], summary, "n_train", "lipschitz_bound", label="Lipschitz bound")
 
-    line_with_band(axes[5], summary, "n_train", "test_mse", "Finite sample")
-    dashed_theory(
-        axes[5],
-        summary,
-        "n_train",
-        "unified_risk_bound",
-        label="Calibrated bound",
-    )
-    dashed_theory(
-        axes[5],
-        summary,
-        "n_train",
-        "population_rank_r_mse",
-        label=r"Population rank-$r$",
-        color=GRAY,
-        linestyle=":",
-        alpha=0.75,
-    )
+    line_with_band(axes[5], summary, "n_train", "population_risk", "Finite sample")
+    dashed_theory(axes[5], summary, "n_train", "risk_bound", label="Risk bound")
+    dashed_theory(axes[5], summary, "n_train", "oracle_risk", label=r"Population rank-$r$", color=GRAY,
+                  linestyle=":", alpha=0.75)
 
+    ticks = [2**19, 2**21, 2**23, 2**25]
     for ax in axes:
         ax.set_xscale("log", base=2)
-        ticks = [512, 2048, 8192, 16384]
         ax.set_xticks(ticks)
-        ax.set_xticklabels(["512", "2k", "8k", "16k"])
+        ax.set_xticklabels(["0.5M", "2M", "8M", "32M"])
     for ax in axes[:3]:
         ax.tick_params(axis="x", which="major", bottom=True, labelbottom=True)
-    axes[2].set_yscale("log")
-    axes[3].set_yscale("log")
-    axes[4].set_yscale("log")
-    axes[5].set_yscale("log")
-    add_axis_legend(axes[0])
-    add_axis_legend(axes[1])
-    add_axis_legend(axes[2])
-    add_axis_legend(axes[3])
-    add_axis_legend(axes[4])
-    add_axis_legend(axes[5])
+    for ax in axes[2:]:
+        ax.set_yscale("log")
+    axes[2].set_ylim(1e-4, 1.0)
+    for ax in axes:
+        add_axis_legend(ax, loc="lower left" if ax is axes[2] else "best")
     style_axis(axes[0], "Training samples $n$", "Gap SVs", "(a)")
-    style_axis(axes[1], "Training samples $n$", "Per-target MSE", "(b)")
+    style_axis(axes[1], "Training samples $n$", "Per-target risk", "(b)")
     style_axis(axes[2], "Training samples $n$", "Rel. perturbation", "(c)")
     style_axis(axes[3], "Training samples $n$", "Subspace error", "(d)")
-    style_axis(axes[4], "Training samples $n$", "Excess MSE", "(e)")
-    style_axis(axes[5], "Training samples $n$", "Per-target MSE", "(f)")
+    style_axis(axes[4], "Training samples $n$", "Excess risk", "(e)")
+    style_axis(axes[5], "Training samples $n$", "Per-target risk", "(f)")
     save_figure(fig, FIGURES / "exp_unified_risk.pdf")
+
 
 
 def main() -> None:
