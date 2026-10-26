@@ -41,8 +41,10 @@ METHODS = [
 ]
 # (channels, height, width) of each image half.
 HALF_SHAPES = {"digits": (1, 8, 4), "mnist": (1, 28, 14), "cifar10": (3, 32, 16), "cifar100": (3, 32, 16)}
-# Figure 2 rows, picked by eye among the top of visual_candidates for a visible difference in the completions.
-FIGURE2_ROWS = {"mnist": [9404, 4043], "cifar100": [6959, 6545]}
+# Figure 2 rows, picked by eye for a visible difference among the test images where prediction-side has the lowest
+# latent risk and pixel MSE, ranked by its margin in stroke overlap (MNIST, pixels above 0.5) and in 4x4-pooled
+# color error (CIFAR-100).
+FIGURE2_ROWS = {"mnist": [1752, 7532], "cifar100": [8808, 6975]}
 
 captured: dict[str, np.ndarray] = {}
 built: list[torch.nn.Module] = []
