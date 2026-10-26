@@ -1,8 +1,8 @@
 """Qualitative completions for the latent-target JEPA experiment (Table 1), one figure per task.
 
 Each objective trains at seed 0 with its Table 1 weight (the lowest mean validation latent risk), and the pixel
-head renders its predictions of the right half. Rows are chosen by choose_examples from
-plot_regularizer_cifar_gpu_samples applied to the per-sample latent risk, and cell labels give that risk. The
+head renders its predictions of the right half. Rows are the top two of visual_candidates, except the Figure 2
+rows picked by eye from its top, and cell labels give each completion's target-half pixel MSE, as in Table 1. The
 experiment scripts are not changed: the predictions, teacher targets and pixel outputs are captured where
 train_one hands them to its metric functions, and the 8x8 pixel head where train_one builds it.
 """
@@ -30,7 +30,6 @@ from experiments import exp_regularizer_mnist_gpu as mnist
 from experiments.common import ROOT
 from experiments.exp_regularizer_digits import load_digit_halves
 from plots.plot_main import FIGURES, GRAY, RESULTS, configure_matplotlib
-from plots.plot_regularizer_cifar_gpu_samples import choose_examples
 
 
 TASKS = ["digits", "mnist", "cifar10", "cifar100"]
@@ -113,12 +112,9 @@ def train_task(task: str, seed: int = 0):
     return x_test, y_test, captured["t_te"], latent, pixels
 
 
-def visual_candidates(y_test: np.ndarray, targets: np.ndarray, latent: dict[str, np.ndarray],
-                      pixels: dict[str, np.ndarray]) -> np.ndarray:
+def visual_candidates(risk: dict[str, np.ndarray], px: dict[str, np.ndarray]) -> np.ndarray:
     """Test indices where prediction-side regularization has both the lowest latent risk and the lowest pixel MSE,
     ranked by its pixel-MSE margin over the best other objective."""
-    risk = {m: np.mean((latent[m] - targets) ** 2, axis=1) for m, _ in METHODS}
-    px = {m: np.mean((np.clip(pixels[m], 0.0, 1.0) - y_test) ** 2, axis=1) for m, _ in METHODS}
     others = [m for m, _ in METHODS if m != "predictive_gaussian"]
     best = (np.all([risk["predictive_gaussian"] < risk[m] for m in others], axis=0)
             & np.all([px["predictive_gaussian"] < px[m] for m in others], axis=0))
@@ -135,11 +131,14 @@ def to_image(half: np.ndarray, task: str) -> np.ndarray:
 
 def plot_samples(task: str, output_path: Path, seed: int = 0) -> None:
     x_test, y_test, targets, latent, pixels = train_task(task, seed)
-    chosen = FIGURE2_ROWS.get(task) or choose_examples(targets, latent)
     risk = {m: np.mean((latent[m] - targets) ** 2, axis=1) for m, _ in METHODS}
+    # Pixel MSE as in Table 1: completions clipped to [0, 1] for MNIST and CIFAR, raw for 8x8 digits.
+    clip = (lambda a: a) if task == "digits" else (lambda a: np.clip(a, 0.0, 1.0))
+    pixel_mse = {m: np.mean((clip(pixels[m]) - y_test) ** 2, axis=1) for m, _ in METHODS}
+    chosen = FIGURE2_ROWS.get(task) or [int(i) for i in visual_candidates(risk, pixel_mse)[:2]]
     for row, idx in enumerate(chosen):
         print(f"  sample {row + 1} (test idx {idx}): "
-              + "  ".join(f"{lbl}={risk[m][idx]:.3f}" for m, lbl in METHODS))
+              + "  ".join(f"{lbl}={pixel_mse[m][idx]:.4f} (risk {risk[m][idx]:.3f})" for m, lbl in METHODS))
 
     configure_matplotlib()
     plt.rcParams.update({"font.weight": "normal", "axes.titleweight": "normal"})
@@ -187,7 +186,7 @@ def plot_samples(task: str, output_path: Path, seed: int = 0) -> None:
                 ax.set_ylabel(f"sample {row + 1}", rotation=0, ha="right", va="center",
                               labelpad=9.0, color=GRAY, fontsize=8.8, fontweight="normal")
             if method is not None:
-                ax.text(0.5, -0.075, f"risk={risk[method][idx]:.{2 if task == 'digits' else 3}f}", transform=ax.transAxes,
+                ax.text(0.5, -0.075, f"MSE={pixel_mse[method][idx]:.4f}", transform=ax.transAxes,
                         ha="center", va="top", fontsize=7.0, fontweight="normal",
                         color=GRAY, clip_on=False)
 
