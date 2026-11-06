@@ -1,8 +1,8 @@
 """Qualitative completions for the latent-target JEPA experiment (Table 1), one figure per task.
 
 Each objective trains at seed 0 with its Table 1 weight (the lowest mean validation latent risk), and the pixel
-head renders its predictions of the right half. Rows are the top two of visual_candidates, except the Figure 2
-rows picked by eye from its top, and cell labels give each completion's target-half pixel MSE, as in Table 1. The
+head renders its predictions of the right half. Rows are the top two of visual_candidates, except the MNIST
+(Figure 2) and CIFAR-100 (Appendix D.2) rows picked by eye from its top, and cell labels give each completion's target-half pixel MSE, as in Table 1. The
 experiment scripts are not changed: the predictions, teacher targets and pixel outputs are captured where
 train_one hands them to its metric functions, and the 8x8 pixel head where train_one builds it.
 """
@@ -41,8 +41,8 @@ METHODS = [
 ]
 # (channels, height, width) of each image half.
 HALF_SHAPES = {"digits": (1, 8, 4), "mnist": (1, 28, 14), "cifar10": (3, 32, 16), "cifar100": (3, 32, 16)}
-# Figure 2 rows, picked by eye for a visible difference among the test images where prediction-side has the lowest
-# latent risk and pixel MSE.
+# Rows of Figure 2 (MNIST) and the Appendix D.2 CIFAR-100 figure, picked by eye for a visible difference among the
+# test images where prediction-side has the lowest latent risk and pixel MSE.
 FIGURE2_ROWS = {"mnist": [1929, 7532], "cifar100": [8808, 6975]}
 
 captured: dict[str, np.ndarray] = {}
